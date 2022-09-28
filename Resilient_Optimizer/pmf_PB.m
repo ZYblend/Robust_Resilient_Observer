@@ -1,5 +1,5 @@
 function r = pmf_PB(p)
-%r = pmf_PB(p) returns the pmf of the sum of mutually independent bernoulli
+%% r = pmf_PB(p) returns the pmf of the sum of mutually independent bernoulli
 %              random variables whose inidivual expected values are given
 %              in the vector p
 %

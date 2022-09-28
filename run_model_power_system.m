@@ -32,6 +32,7 @@ n_bus       = size(bus,1); % number of buses
 n_states    = 2*n_gen;
 p           = n_states + n_bus;
 n_meas      = n_gen + n_bus;  % number of measurements
+n_int = n_meas;
 
 
 %% Network Laplacian
@@ -129,114 +130,26 @@ x0          = zeros(n_states,1);
 x0_hat      = zeros(n_states,1);
 load_buses  = [zeros(n_gen,1); ones(n_bus-n_gen,1)];
 
-%% Resilient Observer Parameters
-
-% parameters
-n       = n_states;         % # of states
-m       = n_meas;           % # of measurements
-l       = n_meas;           % # of inputs
-
-T       = round(2*n);     % receeding horizon
-
+% T       = round(2*n_states);     % receeding horizon
+T = 10;
 N_samples      = 800; % The total number of samples to run
 T_final        = N_samples*T_sample;  % Total time for simulation
-% T_start_opt    = 1.5*T*T_sample; % start time for the optimization routines. Wait to collect enoguh data before calling the optimizers
-tau     = 0.1;              % auxiliary model (1-reliability level)
+T_start_attack = 0.1*T_final;         % start injecting attack at 10s
+T_start_opt(:)    = 1.5*T*T_sample;
+T_start_detect = T_start_attack+T*T_sample;
 
-% tapped delay
-U0      = zeros(m,T);
-Y0      = zeros(m,T);
-q0      = ones(m,T);   % q=1 means safe
-p0      = zeros(m,T);
+%% Receding LSE parameters
+U0      = zeros(n_int,T+1);
+Y0      = zeros(n_meas,T);
 
+[H0_full,H1_full,F] = opti_params(A_bar_d,B_bar_d,C_obsv_d,T);
+% H0: state-ouput linear map                      [n_meas*T-by-n_states]
+% H1:  input-output linear map                     [n_meas*T-by-n_int*(T-1)]
+% F: Observer input-state propagation matrix      [n_meas-by-n_int*(T-1)]
 
-[PhiT,HT,Theta_T,G_T,r_tau] = opti_params(A_bar_d,B_bar_d,C_obsv_d,T,tau);
-
-% solver initial condition
-z_0         = zeros(n+m*T,1);
-
-%% Attack Parameters
-T_start_attack = .2*T_final;  % Time to begin attack. Neede to sshow system responses with/without attacks in the same simulation
-n_attack =  round(0.2*n_meas);
-% max_attack = 100; % maximum allowable attack per channel
-
-%% Bad Data Detection
-BDD_thresh = 0.5e-1;  % Bad data detection tolerance
-[U,~,~] = svd(C_obsv_d);
-U2 = U(:,n_states+1:end);
-
-
-%% Auxiliary model
-
-% % NYISO Auxiliary Models (BUILD OUT LATER)
-% data_GPRs_struct = load('AuxiliaryData\GPRs_2018JantoMar.mat');
-% GPRs_fieldnames = fieldnames(data_GPRs_struct);
-% gprs      = data_GPRs_struct.(GPRs_fieldnames{1});
-% z_bus_all = data_GPRs_struct.(GPRs_fieldnames{2});
-% 
-% % Measurements Data
-% data_y_struct = load('AuxiliaryData\measurements_2018JantoMar.mat');
-% y_meas_all = data_y_struct.measurements_nozero;
-% 
-% % Using the 1st 14 smallest signals
-% y_means = mean(y_meas_all,1);
-% N = size(y_meas_all,1);
-% [~,I_sort] = sort(abs(y_means));
-
-
-
-% Generating surrogate auxiliary model
-%  Steps:
-%     1. Turn off attack and turn off resilient optimizers
-%     2. Run modle without attacks and collect datat
-%     3. Estimate the std for each channel
-%     4. Trun attack and optimizers back on and set the right parameters
-
-n_stds = 3;  % number of standard deviations to locate auxiliary mean
-
-% Initial Sigmas
-sigma_inv_k = 1e4*(3 + 2*rand(m,1)); % surrogate inverse covariance values. Assume diagonal covariance matrix.
-Sigma_inv_k = diag(sigma_inv_k);
-
-sigma = 1/sigma_inv_k;
-Sigma = diag(sigma);
-
-U_y_1 = 0;
-
-% turn off attacks and optimizers
-% T_start_opt = T_final*2;  % optimizers will never start
-% max_attack  = 0;  % zero attack
-% 
-% % run simulation without attacks
-% n_comp       = 3;% number of compopnents to retain
-% U_y_1 = zeros(n_meas,n_comp);
-% sim_out = sim('System_model_discrete');
-% y_obsv       = sim_out.logsout.getElement('y_obsv').Values.Data.'; % measured y for observer (y_obsv = y-D*u)
-% [U_y,S_y,V_y]= svd(y_obsv);
-% U_y_1(:,:)   = U_y(:,1:n_comp);  % dimesionality reduction
-% weights      = U_y_1.'*(y_obsv);
-% y_obsv_hat   = U_y_1*weights;
-% error        = y_obsv - y_obsv_hat;
-% 
-% error_norms = max(sum(error.^2));
-% 
-% % update Sigmas
-% sigma_inv_k(:)   = (1/error_norms)*ones(n_meas,1);%(error_norms.^(-1));
-% Sigma_inv_k(:,:) = diag(sigma_inv_k);
-% 
-% r_tau = max(sum(Sigma_inv_k*(error.^2)));
-
-% calculate stds for y_obsv
-% y_stds = std(y_obsv,2);
-% 
-% % update Sigmas
-% sigma_inv_k(:)   = (y_stds.^(-2));
-% Sigma_inv_k(:,:) = diag(sigma_inv_k);
-
-
-% turn on attacks and optimizers
-T_start_opt(:)    = 1.5*T*T_sample; % start time for the optimization routines. Wait to collect enoguh data before calling the optimizers
-max_attack(:)     = 100;
-
-
-
+% Observer Dynamics for attack-free case
+H0_full_pinv = pinv(H0_full,0.001);
+Ly = A_bar_d.'*H0_full_pinv;
+Lu = F-A_bar_d.'*H0_full_pinv*H1_full;
+% residual
+H0_perp_full = eye(size(H0_full,1)) - H0_full*H0_full_pinv;
