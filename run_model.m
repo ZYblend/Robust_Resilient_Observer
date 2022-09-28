@@ -146,6 +146,8 @@ tau     = 0.1;              % auxiliary model (1-reliability level)
 % tapped delay
 U0      = zeros(m,T);
 Y0      = zeros(m,T);
+q0      = ones(m,T);   % q=1 means safe
+p0      = zeros(m,T);
 
 
 [PhiT,HT,Theta_T,G_T,r_tau] = opti_params(A_bar_d,B_bar_d,C_obsv_d,T,tau);
@@ -155,7 +157,7 @@ z_0         = zeros(n+m*T,1);
 
 %% Attack Parameters
 T_start_attack = .2*T_final;  % Time to begin attack. Neede to sshow system responses with/without attacks in the same simulation
-n_attack =  round(0.3*n_meas);
+n_attack =  round(0.2*n_meas);
 % max_attack = 100; % maximum allowable attack per channel
 
 %% Bad Data Detection
@@ -195,6 +197,9 @@ n_stds = 3;  % number of standard deviations to locate auxiliary mean
 % Initial Sigmas
 sigma_inv_k = 1e4*(3 + 2*rand(m,1)); % surrogate inverse covariance values. Assume diagonal covariance matrix.
 Sigma_inv_k = diag(sigma_inv_k);
+
+sigma = 1/sigma_inv_k;
+Sigma = diag(sigma);
 
 U_y_1 = 0;
 
