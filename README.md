@@ -11,3 +11,9 @@ This repository is for a recently submitted paper for 2023 IEEE American Control
 - Run `WDS.slx`
 - Run `plot_results.m`
 
+## Results
+- Error plot
+![error_plot](https://user-images.githubusercontent.com/36635562/193427290-b7b5f9a2-0aff-4c44-ad73-337826ca4e77.png)
+- Precision plot
+![precision_plot](https://user-images.githubusercontent.com/36635562/193427301-5d683f98-6d1a-41a4-83aa-fe6e51843457.png)
+
